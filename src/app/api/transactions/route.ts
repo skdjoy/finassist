@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   // Get grouped info
   const txIds = (data || []).map((t) => t.id);
-  let groupData: any[] = [];
+  let groupData: { primary_transaction_id: string; linked_transaction_id: string }[] = [];
   if (txIds.length > 0) {
     const { data: groups } = await supabase.from("transaction_groups").select("*")
       .or(`primary_transaction_id.in.(${txIds.join(",")}),linked_transaction_id.in.(${txIds.join(",")})`);
