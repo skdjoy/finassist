@@ -48,20 +48,32 @@ export function Header({ month, onMonthChange }: HeaderProps) {
 
   async function handleSync() {
     setSyncing(true);
+    let totalSynced = 0;
+    let batch = 0;
+    const maxBatches = 10; // 10 x 100 = 1000 emails max for initial backlog
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      const data = await res.json();
-      if (res.status === 409) {
-        toast.info("Sync already in progress");
-        startPolling();
-        return;
+      while (batch < maxBatches) {
+        batch++;
+        const res = await fetch("/api/sync", { method: "POST" });
+        const data = await res.json();
+        if (res.status === 409) {
+          toast.info("Sync already in progress");
+          startPolling();
+          return;
+        }
+        if (!res.ok) {
+          toast.error(`Error: ${data.error}`);
+          break;
+        }
+        totalSynced += data.synced;
+        if (data.hasMore) {
+          toast.info(`Batch ${batch}: synced ${data.synced} transactions, fetching more...`);
+        } else {
+          toast.success(`Synced ${totalSynced} transactions total (${batch} batch${batch > 1 ? "es" : ""})`);
+          break;
+        }
       }
-      if (res.ok) {
-        toast.success(`Synced ${data.synced} transactions, ${data.grouped} grouped, ${data.skipped} skipped`);
-        router.refresh();
-      } else {
-        toast.error(`Error: ${data.error}`);
-      }
+      router.refresh();
     } catch {
       toast.error("Sync failed");
     }

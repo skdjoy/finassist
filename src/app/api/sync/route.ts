@@ -173,10 +173,18 @@ export async function POST() {
     }
 
     // 9. Update sync state and clear lock
+    // On first sync (no lastSyncAt), only set last_sync_at once the full backlog
+    // is processed (fetched < 100). This lets repeated syncs catch up on history.
+    const allCaughtUp = lastSyncAt || messageRefs.length < 100;
     await supabase.from("sync_state")
-      .update({ last_sync_at: new Date().toISOString(), syncing: false, syncing_started_at: null }).eq("id", 1);
+      .update({
+        last_sync_at: allCaughtUp ? new Date().toISOString() : null,
+        syncing: false,
+        syncing_started_at: null,
+      }).eq("id", 1);
 
-    return NextResponse.json({ synced: parsedResults.length, grouped: groups.length, skipped });
+    const hasMore = !lastSyncAt && messageRefs.length >= 100;
+    return NextResponse.json({ synced: parsedResults.length, grouped: groups.length, skipped, hasMore });
   } catch (error) {
     // Clear lock on failure
     await supabase.from("sync_state").update({ syncing: false, syncing_started_at: null }).eq("id", 1);
