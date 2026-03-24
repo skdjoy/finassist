@@ -25,7 +25,7 @@ FinAssist is a single-user personal finance tracker that reads Gmail transaction
 
 The core flow is: **Gmail API -> Router -> Parsers -> Grouping -> Supabase**
 
-1. **Sync trigger** (`src/app/api/sync/route.ts`): User clicks Sync, fetches emails from known senders since last sync, deduplicates by `gmail_message_id`
+1. **Sync trigger** (`src/app/api/sync/route.ts`): User clicks Sync, fetches emails from known senders since last sync, deduplicates by `gmail_message_id`. Per-email error handling skips bad emails (inserted with `parser_used: "error"` for dedup). Returns enriched response with breakdown by parser/type and error details.
 2. **Router** (`src/lib/parsers/router.ts`): Matches sender address + subject to select a parser. Skips promotional/OTP emails.
 3. **Regex parsers** (`src/lib/parsers/scb-card.ts`, `scb-transfer.ts`, `scb-cc-payment.ts`, `citybank-deposit.ts`, `citytouch-bkash.ts`): Extract amount, merchant, date from structured bank emails using regex
 4. **LLM parser** (`src/lib/parsers/llm-service.ts`): Uses Claude Haiku for unstructured service emails (Foodpanda, Uber, Spotify, etc.)
@@ -52,7 +52,7 @@ Schema in `supabase/migrations/001_initial_schema.sql`. Key tables:
 - `emails`: Gmail message tracking, FK to transactions, dedup key on `gmail_message_id`
 - `transaction_groups`: Links primary + linked transactions with a `group_reason`
 - `budgets`: Monthly budgets per category (UNIQUE on month+category)
-- `sync_state`: Single row (id=1) tracking `last_sync_at`
+- `sync_state`: Single row (id=1) tracking `last_sync_at`, `syncing` (boolean lock), `syncing_started_at` (stale lock detection, auto-clears after 5 min)
 - `category_rules`: User merchant->category overrides, queried at sync time
 
 ### Transaction Types
@@ -64,7 +64,7 @@ Schema in `supabase/migrations/001_initial_schema.sql`. Key tables:
 
 ### Parser Sources
 
-`scb_card`, `scb_transfer`, `scb_cc_payment`, `citybank_deposit`, `citytouch_bkash`, `llm_service`
+`scb_card`, `scb_transfer`, `scb_cc_payment`, `citybank_deposit`, `citytouch_bkash`, `llm_service`, `skip`, `error`
 
 ### Frontend
 
@@ -104,7 +104,8 @@ Dashboard API (`/api/dashboard`) excludes linked (grouped) transactions from tot
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/sync` | POST | Trigger email sync from Gmail |
+| `/api/sync` | GET | Sync status (`syncing`, `lastSyncAt`) |
+| `/api/sync` | POST | Trigger email sync; returns `{ synced, grouped, skipped, errors[], hasMore, lastSyncAt, breakdown }` |
 | `/api/dashboard` | GET | Dashboard data (expenses, trends, recurring, insights) |
 | `/api/transactions` | GET | Paginated transactions (supports `page`, `limit`, `month`, `category`, `type`, `search`) |
 | `/api/transactions/[id]` | PATCH | Update transaction (e.g., category change) |

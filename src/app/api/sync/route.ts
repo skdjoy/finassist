@@ -20,6 +20,21 @@ const SEARCH_QUERY = [
   "from:BD.ebilling@dhl.com",
 ].join(" OR ");
 
+interface SyncError {
+  messageId: string;
+  sender?: string;
+  subject?: string;
+  error: string;
+}
+
+async function updateLastSyncAt() {
+  await supabase.from("sync_state").update({
+    last_sync_at: new Date().toISOString(),
+    syncing: false,
+    syncing_started_at: null,
+  }).eq("id", 1);
+}
+
 export async function GET() {
   const { data: syncState } = await supabase
     .from("sync_state").select("*").eq("id", 1).single();
@@ -75,11 +90,15 @@ export async function POST() {
 
     // 3. Fetch emails from Gmail
     const gmail = await getGmailClient();
-    // Limit batch size to fit within Vercel's 60s function timeout
-    // ~100 emails per sync; user can sync multiple times to catch up
     const messageRefs = await searchEmails(gmail, query, 100);
     if (messageRefs.length === 0) {
-      return NextResponse.json({ synced: 0, grouped: 0, skipped: 0 });
+      // BUG 1 FIX: Clear lock before early return
+      await updateLastSyncAt();
+      return NextResponse.json({
+        synced: 0, grouped: 0, skipped: 0, errors: [],
+        hasMore: false, lastSyncAt: new Date().toISOString(),
+        breakdown: { byParser: {}, byType: {} },
+      });
     }
 
     // 4. Filter already-processed
@@ -89,71 +108,110 @@ export async function POST() {
     const existingIds = new Set((existingEmails || []).map((e) => e.gmail_message_id));
     const newMessageIds = messageIds.filter((id) => !existingIds.has(id));
     if (newMessageIds.length === 0) {
-      return NextResponse.json({ synced: 0, grouped: 0, skipped: 0 });
+      // BUG 1 FIX: Clear lock before early return
+      await updateLastSyncAt();
+      return NextResponse.json({
+        synced: 0, grouped: 0, skipped: 0, errors: [],
+        hasMore: false, lastSyncAt: new Date().toISOString(),
+        breakdown: { byParser: {}, byType: {} },
+      });
     }
 
-    // 5. Read and parse each email
+    // 5. Read and parse each email — BUG 2 FIX: per-email try-catch
     const parsedResults: { email: EmailInput; tx: TransactionWithEmail; parserUsed: string }[] = [];
     let skipped = 0;
+    const errors: SyncError[] = [];
 
     for (const msgId of newMessageIds) {
-      const emailData = await readEmail(gmail, msgId);
-      const emailInput: EmailInput = {
-        messageId: emailData.messageId, threadId: emailData.threadId,
-        from: emailData.from, subject: emailData.subject,
-        body: emailData.body, snippet: emailData.snippet,
-        date: emailData.date, internalDate: emailData.internalDate,
-      };
+      try {
+        const emailData = await readEmail(gmail, msgId);
+        const emailInput: EmailInput = {
+          messageId: emailData.messageId, threadId: emailData.threadId,
+          from: emailData.from, subject: emailData.subject,
+          body: emailData.body, snippet: emailData.snippet,
+          date: emailData.date, internalDate: emailData.internalDate,
+        };
 
-      const { parser, parse } = routeEmail(emailInput);
+        const { parser, parse } = routeEmail(emailInput);
 
-      if (parser === "skip") {
-        skipped++;
-        await supabase.from("emails").insert({
-          gmail_message_id: emailData.messageId, sender: emailData.from,
-          subject: emailData.subject, snippet: emailData.snippet,
-          email_date: emailData.internalDate.toISOString(), parser_used: "skip",
+        if (parser === "skip") {
+          skipped++;
+          await supabase.from("emails").insert({
+            gmail_message_id: emailData.messageId, sender: emailData.from,
+            subject: emailData.subject, snippet: emailData.snippet,
+            email_date: emailData.internalDate.toISOString(), parser_used: "skip",
+          });
+          continue;
+        }
+
+        const result = await parse();
+        if (result.status === "skip") {
+          skipped++;
+          await supabase.from("emails").insert({
+            gmail_message_id: emailData.messageId, sender: emailData.from,
+            subject: emailData.subject, snippet: emailData.snippet,
+            email_date: emailData.internalDate.toISOString(), parser_used: parser,
+          });
+          continue;
+        }
+
+        parsedResults.push({
+          email: emailInput,
+          tx: { ...result.transaction, _emailId: emailData.messageId },
+          parserUsed: parser,
         });
-        continue;
-      }
-
-      const result = await parse();
-      if (result.status === "skip") {
-        skipped++;
-        await supabase.from("emails").insert({
-          gmail_message_id: emailData.messageId, sender: emailData.from,
-          subject: emailData.subject, snippet: emailData.snippet,
-          email_date: emailData.internalDate.toISOString(), parser_used: parser,
+      } catch (err) {
+        console.error(`Error processing email ${msgId}:`, err);
+        errors.push({
+          messageId: msgId,
+          error: err instanceof Error ? err.message : "Unknown error",
         });
-        continue;
+        // Insert error record so this email gets deduped on next sync
+        try {
+          await supabase.from("emails").insert({
+            gmail_message_id: msgId,
+            sender: "unknown",
+            email_date: new Date().toISOString(),
+            parser_used: "error",
+          });
+        } catch { /* ignore duplicate insert failures */ }
       }
-
-      parsedResults.push({
-        email: emailInput,
-        tx: { ...result.transaction, _emailId: emailData.messageId },
-        parserUsed: parser,
-      });
     }
 
     // 6. Run grouping
     const allTxs = parsedResults.map((r) => r.tx);
     const groups = findGroups(allTxs);
 
-    // 7. Insert transactions and emails
+    // 7. Insert transactions and emails — BUG 4 FIX: check insert errors
     const emailIdToTxId: Record<string, string> = {};
     for (const { email, tx, parserUsed } of parsedResults) {
-      const { data: txRow } = await supabase.from("transactions").insert({
+      const { data: txRow, error: txError } = await supabase.from("transactions").insert({
         amount: tx.amount, currency: tx.currency, type: tx.type,
         category: tx.category, merchant: tx.merchant, description: tx.description,
         transaction_date: tx.transactionDate.toISOString(), source: tx.source,
         raw_data: tx.rawData,
       }).select("id").single();
 
-      const txId = txRow?.id;
-      if (txId) emailIdToTxId[tx._emailId] = txId;
+      if (txError || !txRow?.id) {
+        errors.push({
+          messageId: tx._emailId,
+          sender: email.from,
+          subject: email.subject,
+          error: `Transaction insert failed: ${txError?.message || "no id returned"}`,
+        });
+        // Still insert email for dedup
+        await supabase.from("emails").insert({
+          gmail_message_id: email.messageId, sender: email.from,
+          subject: email.subject, snippet: email.snippet,
+          email_date: email.internalDate.toISOString(), parser_used: parserUsed,
+        });
+        continue;
+      }
+
+      emailIdToTxId[tx._emailId] = txRow.id;
 
       await supabase.from("emails").insert({
-        gmail_message_id: email.messageId, transaction_id: txId || null,
+        gmail_message_id: email.messageId, transaction_id: txRow.id,
         sender: email.from, subject: email.subject, snippet: email.snippet,
         email_date: email.internalDate.toISOString(), parser_used: parserUsed,
       });
@@ -172,19 +230,36 @@ export async function POST() {
       }
     }
 
-    // 9. Update sync state and clear lock
-    // On first sync (no lastSyncAt), only set last_sync_at once the full backlog
-    // is processed (fetched < 100). This lets repeated syncs catch up on history.
-    const allCaughtUp = lastSyncAt || messageRefs.length < 100;
+    // 9. Build breakdown for response
+    const byParser: Record<string, number> = {};
+    const byType: Record<string, number> = {};
+    for (const { parserUsed, tx } of parsedResults) {
+      byParser[parserUsed] = (byParser[parserUsed] || 0) + 1;
+      byType[tx.type] = (byType[tx.type] || 0) + 1;
+    }
+
+    // 10. Update sync state and clear lock
+    // BUG 3 FIX: Guard hasMore with processedNew > 0 to prevent infinite loop
+    const processedNew = parsedResults.length + skipped + errors.length;
+    const hasMore = !lastSyncAt && messageRefs.length >= 100 && processedNew > 0;
+    const allCaughtUp = !hasMore;
+    const now = new Date().toISOString();
     await supabase.from("sync_state")
       .update({
-        last_sync_at: allCaughtUp ? new Date().toISOString() : null,
-        syncing: false,
-        syncing_started_at: null,
+        last_sync_at: allCaughtUp ? now : null,
+        syncing: hasMore,
+        syncing_started_at: hasMore ? syncState?.syncing_started_at : null,
       }).eq("id", 1);
 
-    const hasMore = !lastSyncAt && messageRefs.length >= 100;
-    return NextResponse.json({ synced: parsedResults.length, grouped: groups.length, skipped, hasMore });
+    return NextResponse.json({
+      synced: parsedResults.length,
+      grouped: groups.length,
+      skipped,
+      errors,
+      hasMore,
+      lastSyncAt: allCaughtUp ? now : null,
+      breakdown: { byParser, byType },
+    });
   } catch (error) {
     // Clear lock on failure
     await supabase.from("sync_state").update({ syncing: false, syncing_started_at: null }).eq("id", 1);
