@@ -19,8 +19,15 @@ export function CategoryRulesManager() {
   const [loading, setLoading] = useState(true);
 
   async function fetchRules() {
-    const res = await fetch("/api/category-rules");
-    setRules(await res.json());
+    try {
+      const res = await fetch("/api/category-rules");
+      if (res.ok) {
+        const data = await res.json();
+        setRules(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // API error - leave rules empty
+    }
     setLoading(false);
   }
 
