@@ -20,14 +20,30 @@ const SEARCH_QUERY = [
   "from:BD.ebilling@dhl.com",
 ].join(" OR ");
 
+export async function GET() {
+  const { data: syncState } = await supabase
+    .from("sync_state").select("*").eq("id", 1).single();
+  return NextResponse.json({
+    syncing: syncState?.syncing || false,
+    lastSyncAt: syncState?.last_sync_at,
+  });
+}
+
 export async function POST() {
   try {
-    // 0. Load user category rules
-    await loadUserCategoryRules();
-
-    // 1. Get sync state
+    // 0. Check if already syncing (server-side lock)
     const { data: syncState } = await supabase
       .from("sync_state").select("*").eq("id", 1).single();
+    if (syncState?.syncing) {
+      return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
+    }
+
+    // Mark as syncing
+    await supabase.from("sync_state").update({ syncing: true }).eq("id", 1);
+
+    // 0b. Load user category rules
+    await loadUserCategoryRules();
+
     const lastSyncAt = syncState?.last_sync_at;
 
     // 2. Build query with date filter
@@ -135,12 +151,14 @@ export async function POST() {
       }
     }
 
-    // 9. Update sync state
+    // 9. Update sync state and clear lock
     await supabase.from("sync_state")
-      .update({ last_sync_at: new Date().toISOString() }).eq("id", 1);
+      .update({ last_sync_at: new Date().toISOString(), syncing: false }).eq("id", 1);
 
     return NextResponse.json({ synced: parsedResults.length, grouped: groups.length, skipped });
   } catch (error) {
+    // Clear lock on failure
+    await supabase.from("sync_state").update({ syncing: false }).eq("id", 1);
     console.error("Sync error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },

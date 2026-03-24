@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MonthSelector } from "./month-selector";
+import { Loader2 } from "lucide-react";
 
 interface HeaderProps {
   month: string;
@@ -16,14 +17,47 @@ export function Header({ month, onMonthChange }: HeaderProps) {
   const [syncing, setSyncing] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check if a sync is already in progress on mount
+  useEffect(() => {
+    fetch("/api/sync").then((r) => r.json()).then((data) => {
+      if (data.syncing) {
+        setSyncing(true);
+        startPolling();
+      }
+    }).catch(() => {});
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  function startPolling() {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/sync");
+        const data = await res.json();
+        if (!data.syncing) {
+          setSyncing(false);
+          if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+          toast.success("Sync complete");
+          router.refresh();
+        }
+      } catch {}
+    }, 5000);
+  }
 
   async function handleSync() {
     setSyncing(true);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json();
+      if (res.status === 409) {
+        toast.info("Sync already in progress");
+        startPolling();
+        return;
+      }
       if (res.ok) {
-        toast.success(`Synced ${data.synced} transactions, ${data.grouped} grouped`);
+        toast.success(`Synced ${data.synced} transactions, ${data.grouped} grouped, ${data.skipped} skipped`);
         router.refresh();
       } else {
         toast.error(`Error: ${data.error}`);
@@ -63,7 +97,7 @@ export function Header({ month, onMonthChange }: HeaderProps) {
         <div className="flex items-center gap-3">
           <MonthSelector value={month} onChange={onMonthChange} />
           <Button size="sm" onClick={handleSync} disabled={syncing}>
-            {syncing ? "Syncing..." : "Sync"}
+            {syncing ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Syncing...</> : "Sync"}
           </Button>
           <Button size="sm" variant="ghost" onClick={handleLogout}>Logout</Button>
         </div>
