@@ -68,9 +68,28 @@ Schema in `supabase/migrations/001_initial_schema.sql`. Key tables:
 
 ### Frontend
 
-Next.js App Router pages at `/`, `/transactions`, `/budgets`, `/settings`, `/login`. All use `"use client"` with fetch-based data loading. Charts via Recharts, UI via shadcn/ui + Tailwind.
+Next.js App Router pages at `/`, `/transactions`, `/budgets`, `/settings`, `/login`. All use `"use client"` with fetch-based data loading. Charts via Recharts, UI via shadcn/ui + Tailwind. Toast notifications via Sonner. Navigation uses Next.js `<Link>` for client-side routing.
 
-Dashboard API (`/api/dashboard`) excludes linked (grouped) transactions from totals and returns 6-month trend data.
+Dashboard API (`/api/dashboard`) excludes linked (grouped) transactions from totals and returns 6-month trend data (always backfills all 6 months even if empty), recurring charge detection, and spending insights.
+
+### Styling
+
+- **Theme system**: CSS variables use `oklch()` in `globals.css`, referenced as `var(--xxx)` in `tailwind.config.ts`. Do NOT wrap in `hsl()`.
+- **Color tokens**: Use `bg-card`, `bg-muted/50`, `text-foreground`, `text-muted-foreground` — never hardcoded `bg-white`, `bg-gray-50`, `text-black`, `text-gray-500`.
+- **Dark mode**: Variables defined in `globals.css` `.dark` block but not yet activated (next-themes installed, `darkMode: ["class"]` in tailwind config).
+
+### Merchant Name Handling
+
+- `src/lib/merchant-utils.ts`: `normalizeMerchant()` title-cases names and preserves known acronyms (KFC, ATM, DHL, SCB, LTD, etc.)
+- Used in parsers for new data and in display components (transaction-table, top-expenses-table, merchant-bar-chart) for existing data
+- `src/lib/gmail.ts`: HTML entity stripping (line 96-102) decodes `&nbsp;`, `&amp;`, numeric entities after tag removal
+
+### Advanced Features
+
+- **Category Rule Management**: API at `/api/category-rules` (GET/POST/DELETE), UI component `category-rules-manager.tsx` on Settings page
+- **Recurring Detection**: `src/lib/recurring.ts` groups 3-month expenses by merchant, detects weekly/monthly patterns with consistent amounts (±10%)
+- **Spending Insights**: `src/lib/insights.ts` generates alerts comparing current vs previous month (spending changes, budget warnings, category spikes)
+- **Data Cleanup**: POST `/api/admin/cleanup` normalizes merchant names and re-categorizes existing transactions
 
 ### Grouping Rules
 
@@ -81,6 +100,24 @@ Dashboard API (`/api/dashboard`) excludes linked (grouped) transactions from tot
 | Bank alert + service email | Amount ±5 BDT + fuzzy merchant | 60 min | Service email |
 | bKash + City Bank deposit | Amount ±1 BDT | 30 min | bKash transfer |
 
+### API Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/sync` | POST | Trigger email sync from Gmail |
+| `/api/dashboard` | GET | Dashboard data (expenses, trends, recurring, insights) |
+| `/api/transactions` | GET | Paginated transactions (supports `page`, `limit`, `month`, `category`, `type`, `search`) |
+| `/api/transactions/[id]` | PATCH | Update transaction (e.g., category change) |
+| `/api/budgets` | GET/POST/DELETE | Budget CRUD |
+| `/api/category-rules` | GET/POST/DELETE | Category rule CRUD |
+| `/api/admin/cleanup` | POST | One-time data cleanup (normalize merchants, fix categories) |
+| `/api/gmail/connect` | GET | Start Gmail OAuth flow |
+| `/api/gmail/callback` | GET | Gmail OAuth callback |
+| `/api/auth/login` | POST | Login |
+| `/api/auth/logout` | POST | Logout |
+
 ### Testing
 
 Tests live in `__tests__/`. Vitest with `@` path alias. `vitest.setup.ts` injects placeholder env vars so Supabase client doesn't fail at import time. Parser tests use real email body text from actual bank emails.
+
+Test suites: `scb-card` (3), `scb-transfer` (1), `router` (9), `citybank-deposit` (1), `citytouch-bkash` (1), `grouping` (3), `categories` (25), `merchant-utils` (6). Total: 49 tests.
