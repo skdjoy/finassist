@@ -40,7 +40,7 @@ export async function POST() {
 
     // 3. Fetch emails from Gmail
     const gmail = await getGmailClient();
-    const messageRefs = await searchEmails(gmail, query, 200);
+    const messageRefs = await searchEmails(gmail, query, lastSyncAt ? 200 : 1000);
     if (messageRefs.length === 0) {
       return NextResponse.json({ synced: 0, grouped: 0, skipped: 0 });
     }

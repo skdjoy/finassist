@@ -66,8 +66,22 @@ export async function searchEmails(
   query: string,
   maxResults = 100
 ) {
-  const res = await gmail.users.messages.list({ userId: "me", q: query, maxResults });
-  return res.data.messages || [];
+  const messages: { id?: string | null; threadId?: string | null }[] = [];
+  let pageToken: string | undefined;
+  const pageSize = Math.min(maxResults, 500);
+
+  while (messages.length < maxResults) {
+    const res = await gmail.users.messages.list({
+      userId: "me", q: query,
+      maxResults: Math.min(pageSize, maxResults - messages.length),
+      pageToken,
+    });
+    messages.push(...(res.data.messages || []));
+    pageToken = res.data.nextPageToken ?? undefined;
+    if (!pageToken) break;
+  }
+
+  return messages;
 }
 
 export async function readEmail(
