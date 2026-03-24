@@ -27,12 +27,19 @@ interface SyncError {
   error: string;
 }
 
-async function updateLastSyncAt() {
-  await supabase.from("sync_state").update({
-    last_sync_at: new Date().toISOString(),
-    syncing: false,
-    syncing_started_at: null,
-  }).eq("id", 1);
+// Separate updates so one failing field can't break the other
+async function clearSyncLock() {
+  const { error } = await supabase.from("sync_state")
+    .update({ syncing: false, syncing_started_at: null })
+    .eq("id", 1);
+  if (error) console.error("Failed to clear sync lock:", error.message);
+}
+
+async function setLastSyncAt(timestamp: string) {
+  const { error } = await supabase.from("sync_state")
+    .update({ last_sync_at: timestamp })
+    .eq("id", 1);
+  if (error) console.error("Failed to update last_sync_at:", error.message);
 }
 
 export async function GET() {
@@ -44,7 +51,7 @@ export async function GET() {
   if (syncing && syncState?.syncing_started_at) {
     const elapsed = Date.now() - new Date(syncState.syncing_started_at).getTime();
     if (elapsed > 5 * 60 * 1000) {
-      await supabase.from("sync_state").update({ syncing: false }).eq("id", 1);
+      await clearSyncLock();
       syncing = false;
     }
   }
@@ -72,8 +79,11 @@ export async function POST() {
       return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
     }
 
-    // Mark as syncing with timestamp
-    await supabase.from("sync_state").update({ syncing: true, syncing_started_at: new Date().toISOString() }).eq("id", 1);
+    // Mark as syncing with timestamp (separate call)
+    const { error: lockError } = await supabase.from("sync_state")
+      .update({ syncing: true, syncing_started_at: new Date().toISOString() })
+      .eq("id", 1);
+    if (lockError) console.error("Failed to set sync lock:", lockError.message);
 
     // 0b. Load user category rules
     await loadUserCategoryRules();
@@ -92,32 +102,41 @@ export async function POST() {
     const gmail = await getGmailClient();
     const messageRefs = await searchEmails(gmail, query, 100);
     if (messageRefs.length === 0) {
-      // BUG 1 FIX: Clear lock before early return
-      await updateLastSyncAt();
+      const now = new Date().toISOString();
+      await setLastSyncAt(now);
+      await clearSyncLock();
       return NextResponse.json({
         synced: 0, grouped: 0, skipped: 0, errors: [],
-        hasMore: false, lastSyncAt: new Date().toISOString(),
+        hasMore: false, lastSyncAt: now,
         breakdown: { byParser: {}, byType: {} },
       });
     }
 
-    // 4. Filter already-processed
+    // 4. Filter already-processed — abort on query error
     const messageIds = messageRefs.map((m) => m.id!);
-    const { data: existingEmails } = await supabase
+    const { data: existingEmails, error: dedupError } = await supabase
       .from("emails").select("gmail_message_id").in("gmail_message_id", messageIds);
+    if (dedupError) {
+      await clearSyncLock();
+      return NextResponse.json(
+        { error: `Dedup check failed: ${dedupError.message}` },
+        { status: 500 }
+      );
+    }
     const existingIds = new Set((existingEmails || []).map((e) => e.gmail_message_id));
     const newMessageIds = messageIds.filter((id) => !existingIds.has(id));
     if (newMessageIds.length === 0) {
-      // BUG 1 FIX: Clear lock before early return
-      await updateLastSyncAt();
+      const now = new Date().toISOString();
+      await setLastSyncAt(now);
+      await clearSyncLock();
       return NextResponse.json({
         synced: 0, grouped: 0, skipped: 0, errors: [],
-        hasMore: false, lastSyncAt: new Date().toISOString(),
+        hasMore: false, lastSyncAt: now,
         breakdown: { byParser: {}, byType: {} },
       });
     }
 
-    // 5. Read and parse each email — BUG 2 FIX: per-email try-catch
+    // 5. Read and parse each email — per-email try-catch
     const parsedResults: { email: EmailInput; tx: TransactionWithEmail; parserUsed: string }[] = [];
     let skipped = 0;
     const errors: SyncError[] = [];
@@ -167,14 +186,15 @@ export async function POST() {
           error: err instanceof Error ? err.message : "Unknown error",
         });
         // Insert error record so this email gets deduped on next sync
-        try {
-          await supabase.from("emails").insert({
-            gmail_message_id: msgId,
-            sender: "unknown",
-            email_date: new Date().toISOString(),
-            parser_used: "error",
-          });
-        } catch { /* ignore duplicate insert failures */ }
+        const { error: insertErr } = await supabase.from("emails").insert({
+          gmail_message_id: msgId,
+          sender: "unknown",
+          email_date: new Date().toISOString(),
+          parser_used: "error",
+        });
+        if (insertErr && !insertErr.message.includes("duplicate")) {
+          console.error("Failed to insert error email record:", insertErr.message);
+        }
       }
     }
 
@@ -182,9 +202,29 @@ export async function POST() {
     const allTxs = parsedResults.map((r) => r.tx);
     const groups = findGroups(allTxs);
 
-    // 7. Insert transactions and emails — BUG 4 FIX: check insert errors
+    // 7. Insert email FIRST (dedup gate via UNIQUE gmail_message_id), then transaction
+    let insertedCount = 0;
     const emailIdToTxId: Record<string, string> = {};
     for (const { email, tx, parserUsed } of parsedResults) {
+      // Email insert acts as the authoritative dedup — UNIQUE constraint prevents duplicates
+      const { data: emailRow, error: emailError } = await supabase.from("emails").insert({
+        gmail_message_id: email.messageId, sender: email.from,
+        subject: email.subject, snippet: email.snippet,
+        email_date: email.internalDate.toISOString(), parser_used: parserUsed,
+      }).select("id").single();
+
+      if (emailError) {
+        // UNIQUE violation = already processed, skip silently
+        if (!emailError.message.includes("duplicate")) {
+          errors.push({
+            messageId: tx._emailId, sender: email.from,
+            subject: email.subject, error: `Email insert failed: ${emailError.message}`,
+          });
+        }
+        continue; // Do NOT create transaction — email already exists
+      }
+
+      // Now insert transaction (only if email insert succeeded)
       const { data: txRow, error: txError } = await supabase.from("transactions").insert({
         amount: tx.amount, currency: tx.currency, type: tx.type,
         category: tx.category, merchant: tx.merchant, description: tx.description,
@@ -194,27 +234,17 @@ export async function POST() {
 
       if (txError || !txRow?.id) {
         errors.push({
-          messageId: tx._emailId,
-          sender: email.from,
+          messageId: tx._emailId, sender: email.from,
           subject: email.subject,
           error: `Transaction insert failed: ${txError?.message || "no id returned"}`,
-        });
-        // Still insert email for dedup
-        await supabase.from("emails").insert({
-          gmail_message_id: email.messageId, sender: email.from,
-          subject: email.subject, snippet: email.snippet,
-          email_date: email.internalDate.toISOString(), parser_used: parserUsed,
         });
         continue;
       }
 
+      // Link email to transaction
+      await supabase.from("emails").update({ transaction_id: txRow.id }).eq("id", emailRow.id);
       emailIdToTxId[tx._emailId] = txRow.id;
-
-      await supabase.from("emails").insert({
-        gmail_message_id: email.messageId, transaction_id: txRow.id,
-        sender: email.from, subject: email.subject, snippet: email.snippet,
-        email_date: email.internalDate.toISOString(), parser_used: parserUsed,
-      });
+      insertedCount++;
     }
 
     // 8. Insert groups
@@ -238,31 +268,34 @@ export async function POST() {
       byType[tx.type] = (byType[tx.type] || 0) + 1;
     }
 
-    // 10. Update sync state and clear lock
-    // BUG 3 FIX: Guard hasMore with processedNew > 0 to prevent infinite loop
+    // 10. Update sync state — separate calls so one can't break the other
     const processedNew = parsedResults.length + skipped + errors.length;
     const hasMore = !lastSyncAt && messageRefs.length >= 100 && processedNew > 0;
-    const allCaughtUp = !hasMore;
     const now = new Date().toISOString();
-    await supabase.from("sync_state")
-      .update({
-        last_sync_at: allCaughtUp ? now : null,
-        syncing: hasMore,
-        syncing_started_at: hasMore ? syncState?.syncing_started_at : null,
-      }).eq("id", 1);
+
+    if (!hasMore) {
+      await setLastSyncAt(now);
+      await clearSyncLock();
+    } else {
+      // Keep lock active between batches, refresh timestamp
+      const { error } = await supabase.from("sync_state")
+        .update({ syncing: true, syncing_started_at: new Date().toISOString() })
+        .eq("id", 1);
+      if (error) console.error("Failed to refresh sync lock:", error.message);
+    }
 
     return NextResponse.json({
-      synced: parsedResults.length,
+      synced: insertedCount,
       grouped: groups.length,
       skipped,
       errors,
       hasMore,
-      lastSyncAt: allCaughtUp ? now : null,
+      lastSyncAt: !hasMore ? now : null,
       breakdown: { byParser, byType },
     });
   } catch (error) {
-    // Clear lock on failure
-    await supabase.from("sync_state").update({ syncing: false, syncing_started_at: null }).eq("id", 1);
+    // Clear lock on failure — separate call
+    await clearSyncLock();
     console.error("Sync error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
