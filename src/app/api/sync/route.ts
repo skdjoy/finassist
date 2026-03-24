@@ -23,8 +23,19 @@ const SEARCH_QUERY = [
 export async function GET() {
   const { data: syncState } = await supabase
     .from("sync_state").select("*").eq("id", 1).single();
+
+  // Auto-clear stale locks older than 5 minutes
+  let syncing = syncState?.syncing || false;
+  if (syncing && syncState?.syncing_started_at) {
+    const elapsed = Date.now() - new Date(syncState.syncing_started_at).getTime();
+    if (elapsed > 5 * 60 * 1000) {
+      await supabase.from("sync_state").update({ syncing: false }).eq("id", 1);
+      syncing = false;
+    }
+  }
+
   return NextResponse.json({
-    syncing: syncState?.syncing || false,
+    syncing,
     lastSyncAt: syncState?.last_sync_at,
   });
 }
@@ -34,12 +45,20 @@ export async function POST() {
     // 0. Check if already syncing (server-side lock)
     const { data: syncState } = await supabase
       .from("sync_state").select("*").eq("id", 1).single();
-    if (syncState?.syncing) {
+
+    // Auto-clear stale locks older than 5 minutes
+    if (syncState?.syncing && syncState?.syncing_started_at) {
+      const elapsed = Date.now() - new Date(syncState.syncing_started_at).getTime();
+      if (elapsed <= 5 * 60 * 1000) {
+        return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
+      }
+      // Stale lock — clear it and proceed
+    } else if (syncState?.syncing) {
       return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
     }
 
-    // Mark as syncing
-    await supabase.from("sync_state").update({ syncing: true }).eq("id", 1);
+    // Mark as syncing with timestamp
+    await supabase.from("sync_state").update({ syncing: true, syncing_started_at: new Date().toISOString() }).eq("id", 1);
 
     // 0b. Load user category rules
     await loadUserCategoryRules();
@@ -56,7 +75,9 @@ export async function POST() {
 
     // 3. Fetch emails from Gmail
     const gmail = await getGmailClient();
-    const messageRefs = await searchEmails(gmail, query, lastSyncAt ? 200 : 1000);
+    // Limit batch size to fit within Vercel's 60s function timeout
+    // ~100 emails per sync; user can sync multiple times to catch up
+    const messageRefs = await searchEmails(gmail, query, 100);
     if (messageRefs.length === 0) {
       return NextResponse.json({ synced: 0, grouped: 0, skipped: 0 });
     }
@@ -153,12 +174,12 @@ export async function POST() {
 
     // 9. Update sync state and clear lock
     await supabase.from("sync_state")
-      .update({ last_sync_at: new Date().toISOString(), syncing: false }).eq("id", 1);
+      .update({ last_sync_at: new Date().toISOString(), syncing: false, syncing_started_at: null }).eq("id", 1);
 
     return NextResponse.json({ synced: parsedResults.length, grouped: groups.length, skipped });
   } catch (error) {
     // Clear lock on failure
-    await supabase.from("sync_state").update({ syncing: false }).eq("id", 1);
+    await supabase.from("sync_state").update({ syncing: false, syncing_started_at: null }).eq("id", 1);
     console.error("Sync error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
