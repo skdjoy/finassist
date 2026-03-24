@@ -3,6 +3,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { Header } from "@/components/header";
+import { CategoryRulesManager } from "@/components/category-rules-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ function SettingsContent() {
             <p className="text-sm text-muted-foreground">FinAssist reads transaction emails from Standard Chartered Bank, City Bank, bKash, and various services to track your personal finances.</p>
           </CardContent>
         </Card>
+        <CategoryRulesManager />
       </main>
     </div>
   );

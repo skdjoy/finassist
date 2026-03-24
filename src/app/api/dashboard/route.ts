@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { detectRecurring } from "@/lib/recurring";
+import { generateInsights } from "@/lib/insights";
 
 export async function GET(req: NextRequest) {
   const month = req.nextUrl.searchParams.get("month") || new Date().toISOString().slice(0, 7);
@@ -20,13 +22,13 @@ export async function GET(req: NextRequest) {
   const filtered = (transactions || []).filter((t) => !linkedIds.has(t.id));
 
   const { data: prevTransactions } = await supabase
-    .from("transactions").select("amount, type, id")
+    .from("transactions").select("amount, type, category, id")
     .gte("transaction_date", prevStart).lt("transaction_date", prevEnd);
   const prevFiltered = (prevTransactions || []).filter((t) => !linkedIds.has(t.id));
 
   // 6-month trend
   const { data: trendTransactions } = await supabase
-    .from("transactions").select("amount, type, transaction_date, id")
+    .from("transactions").select("amount, type, transaction_date, merchant, id")
     .gte("transaction_date", trendStart).lt("transaction_date", endDate);
   const trendFiltered = (trendTransactions || []).filter((t) => !linkedIds.has(t.id));
   // Pre-fill all 6 months so chart always shows complete range
@@ -75,9 +77,30 @@ export async function GET(req: NextRequest) {
     return { category: b.category || "overall", budget: Number(b.amount), spent, percentage: Number(b.amount) > 0 ? (spent / Number(b.amount)) * 100 : 0 };
   });
 
+  // Recurring detection (use 3-month data)
+  const recurring = detectRecurring(trendFiltered.map((t) => ({
+    id: t.id, amount: Number(t.amount), merchant: t.merchant, type: t.type, transaction_date: t.transaction_date,
+  })));
+
+  // Spending insights
+  const prevByCategory: Record<string, number> = {};
+  for (const t of prevFiltered.filter((t) => t.type === "expense")) {
+    prevByCategory[t.category] = (prevByCategory[t.category] || 0) + Number(t.amount);
+  }
+  const now = new Date();
+  const daysInMonth = new Date(year, mon, 0).getDate();
+  const daysRemaining = Math.max(0, daysInMonth - now.getDate());
+  const topExpenseItem = topExpenses.length > 0 ? { merchant: topExpenses[0].merchant, amount: topExpenses[0].amount } : null;
+  const insights = generateInsights({
+    totalExpenses, totalIncome, prevExpenses,
+    byCategory, prevByCategory, budgetTracking,
+    topExpense: topExpenseItem, daysRemaining,
+  });
+
   return NextResponse.json({
     totalExpenses, totalIncome,
     expenseChange: prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses) * 100 : 0,
     byCategory, topMerchants, topExpenses, budgetTracking, incomeExpenseTrend,
+    recurring, insights,
   });
 }

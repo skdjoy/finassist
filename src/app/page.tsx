@@ -9,6 +9,8 @@ import { CategoryDonut } from "@/components/category-donut";
 import { MerchantBarChart } from "@/components/merchant-bar-chart";
 import { TopExpensesTable } from "@/components/top-expenses-table";
 import { BudgetProgress } from "@/components/budget-progress";
+import { RecurringTransactions } from "@/components/recurring-transactions";
+import { SpendingInsights } from "@/components/spending-insights";
 
 interface DashboardData {
   totalExpenses: number; totalIncome: number; expenseChange: number;
@@ -17,6 +19,8 @@ interface DashboardData {
   topExpenses: { id: string; merchant: string; amount: number; category: string; date: string; source: string }[];
   budgetTracking: { category: string; budget: number; spent: number; percentage: number }[];
   incomeExpenseTrend: { month: string; income: number; expenses: number }[];
+  recurring: { merchant: string; frequency: "weekly" | "monthly" | "irregular"; avgAmount: number; count: number; lastDate: string; monthlyEstimate: number }[];
+  insights: { type: "info" | "warning" | "alert"; message: string }[];
 }
 
 export default function DashboardPage() {
@@ -52,6 +56,10 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TopExpensesTable expenses={data.topExpenses} />
               <BudgetProgress budgets={data.budgetTracking} />
+            </div>
+            <SpendingInsights insights={data.insights} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RecurringTransactions charges={data.recurring} />
             </div>
           </>
         )}
