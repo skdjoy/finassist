@@ -52,7 +52,7 @@ Schema in `supabase/migrations/001_initial_schema.sql`. Key tables:
 - `emails`: Gmail message tracking, FK to transactions, dedup key on `gmail_message_id`
 - `transaction_groups`: Links primary + linked transactions with a `group_reason`
 - `budgets`: Monthly budgets per category (UNIQUE on month+category)
-- `sync_state`: Single row (id=1) tracking `last_sync_at`, `syncing` (boolean lock), `syncing_started_at` (stale lock detection, auto-clears after 5 min)
+- `sync_state`: Single row (id=1) tracking `last_sync_at`, `syncing` (boolean lock), `last_history_id` (repurposed as sync start timestamp for stale lock detection, auto-clears after 5 min)
 - `category_rules`: User merchant->category overrides, queried at sync time
 
 ### Transaction Types

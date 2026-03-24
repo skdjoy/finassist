@@ -28,9 +28,10 @@ interface SyncError {
 }
 
 // Separate updates so one failing field can't break the other
+// Note: last_history_id is repurposed as sync start timestamp for stale lock detection
 async function clearSyncLock() {
   const { error } = await supabase.from("sync_state")
-    .update({ syncing: false, syncing_started_at: null })
+    .update({ syncing: false, last_history_id: null })
     .eq("id", 1);
   if (error) console.error("Failed to clear sync lock:", error.message);
 }
@@ -48,8 +49,8 @@ export async function GET() {
 
   // Auto-clear stale locks older than 5 minutes
   let syncing = syncState?.syncing || false;
-  if (syncing && syncState?.syncing_started_at) {
-    const elapsed = Date.now() - new Date(syncState.syncing_started_at).getTime();
+  if (syncing && syncState?.last_history_id) {
+    const elapsed = Date.now() - new Date(syncState.last_history_id).getTime();
     if (elapsed > 5 * 60 * 1000) {
       await clearSyncLock();
       syncing = false;
@@ -69,8 +70,8 @@ export async function POST() {
       .from("sync_state").select("*").eq("id", 1).single();
 
     // Auto-clear stale locks older than 5 minutes
-    if (syncState?.syncing && syncState?.syncing_started_at) {
-      const elapsed = Date.now() - new Date(syncState.syncing_started_at).getTime();
+    if (syncState?.syncing && syncState?.last_history_id) {
+      const elapsed = Date.now() - new Date(syncState.last_history_id).getTime();
       if (elapsed <= 5 * 60 * 1000) {
         return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
       }
@@ -79,9 +80,9 @@ export async function POST() {
       return NextResponse.json({ error: "Sync already in progress" }, { status: 409 });
     }
 
-    // Mark as syncing with timestamp (separate call)
+    // Mark as syncing with timestamp (last_history_id repurposed as sync start time)
     const { error: lockError } = await supabase.from("sync_state")
-      .update({ syncing: true, syncing_started_at: new Date().toISOString() })
+      .update({ syncing: true, last_history_id: new Date().toISOString() })
       .eq("id", 1);
     if (lockError) console.error("Failed to set sync lock:", lockError.message);
 
@@ -279,7 +280,7 @@ export async function POST() {
     } else {
       // Keep lock active between batches, refresh timestamp
       const { error } = await supabase.from("sync_state")
-        .update({ syncing: true, syncing_started_at: new Date().toISOString() })
+        .update({ syncing: true, last_history_id: new Date().toISOString() })
         .eq("id", 1);
       if (error) console.error("Failed to refresh sync lock:", error.message);
     }
