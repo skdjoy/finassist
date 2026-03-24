@@ -1,4 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Wallet, TrendingUp, ArrowUpDown, Target } from "lucide-react";
 
 interface SummaryCardsProps {
   totalExpenses: number;
@@ -11,25 +12,42 @@ function formatBDT(amount: number): string {
   return `৳${amount.toLocaleString("en-BD", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
+const cards = [
+  { key: "spent", label: "Total Spent", icon: Wallet, iconBg: "bg-red-50", iconColor: "text-red-600" },
+  { key: "income", label: "Income", icon: TrendingUp, iconBg: "bg-green-50", iconColor: "text-green-600" },
+  { key: "change", label: "vs Last Month", icon: ArrowUpDown, iconBg: "bg-amber-50", iconColor: "text-amber-600" },
+  { key: "budget", label: "Budget Used", icon: Target, iconBg: "bg-blue-50", iconColor: "text-blue-600" },
+];
+
 export function SummaryCards({ totalExpenses, totalIncome, expenseChange, budgetUtilization }: SummaryCardsProps) {
+  const values: Record<string, { display: string; className: string }> = {
+    spent: { display: formatBDT(totalExpenses), className: "text-foreground" },
+    income: { display: formatBDT(totalIncome), className: "text-green-600" },
+    change: { display: `${expenseChange > 0 ? "+" : ""}${expenseChange.toFixed(1)}%`, className: expenseChange > 0 ? "text-red-500" : "text-green-600" },
+    budget: { display: `${budgetUtilization.toFixed(0)}%`, className: budgetUtilization > 90 ? "text-red-500" : "text-foreground" },
+  };
+
   return (
-    <div className="grid grid-cols-4 gap-4">
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Total Spent</CardTitle></CardHeader>
-        <CardContent><p className="text-2xl font-bold">{formatBDT(totalExpenses)}</p></CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Income</CardTitle></CardHeader>
-        <CardContent><p className="text-2xl font-bold text-green-600">{formatBDT(totalIncome)}</p></CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">vs Last Month</CardTitle></CardHeader>
-        <CardContent><p className={`text-2xl font-bold ${expenseChange > 0 ? "text-red-500" : "text-green-600"}`}>{expenseChange > 0 ? "+" : ""}{expenseChange.toFixed(1)}%</p></CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-500">Budget Used</CardTitle></CardHeader>
-        <CardContent><p className={`text-2xl font-bold ${budgetUtilization > 90 ? "text-red-500" : "text-gray-900"}`}>{budgetUtilization.toFixed(0)}%</p></CardContent>
-      </Card>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        const val = values[card.key];
+        return (
+          <Card key={card.key} className="shadow-sm">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-xl ${card.iconBg}`}>
+                  <Icon className={`h-5 w-5 ${card.iconColor}`} />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">{card.label}</p>
+                  <p className={`text-2xl font-bold ${val.className}`}>{val.display}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

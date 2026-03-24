@@ -35,21 +35,21 @@ export default function DashboardPage() {
   const budgetUtilization = overallBudget?.percentage || 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted/50">
       <Header month={month} onMonthChange={setMonth} />
       <main className="container mx-auto px-4 py-6 space-y-6">
         {loading || !data ? (
-          <p className="text-gray-500">Loading...</p>
+          <p className="text-muted-foreground">Loading...</p>
         ) : (
           <>
             <SummaryCards totalExpenses={data.totalExpenses} totalIncome={data.totalIncome}
               expenseChange={data.expenseChange} budgetUtilization={budgetUtilization} />
             <IncomeExpenseChart data={data.incomeExpenseTrend} />
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <CategoryDonut data={data.byCategory} />
               <MerchantBarChart data={data.topMerchants} />
             </div>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TopExpensesTable expenses={data.topExpenses} />
               <BudgetProgress budgets={data.budgetTracking} />
             </div>

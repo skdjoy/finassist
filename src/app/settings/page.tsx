@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-muted/50 flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>}>
       <SettingsContent />
     </Suspense>
   );
@@ -30,7 +30,7 @@ function SettingsContent() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted/50">
       <Header month={month} onMonthChange={setMonth} />
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-2xl">
         <Card>
@@ -39,7 +39,7 @@ function SettingsContent() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">Google Gmail</p>
-                <p className="text-sm text-gray-500">Read-only access to parse transaction emails</p>
+                <p className="text-sm text-muted-foreground">Read-only access to parse transaction emails</p>
               </div>
               <div className="flex items-center gap-3">
                 {gmailStatus === "connected" ? <Badge className="bg-green-100 text-green-700">Connected</Badge>
@@ -56,7 +56,7 @@ function SettingsContent() {
         <Card>
           <CardHeader><CardTitle>About</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-500">FinAssist reads transaction emails from Standard Chartered Bank, City Bank, bKash, and various services to track your personal finances.</p>
+            <p className="text-sm text-muted-foreground">FinAssist reads transaction emails from Standard Chartered Bank, City Bank, bKash, and various services to track your personal finances.</p>
           </CardContent>
         </Card>
       </main>

@@ -94,6 +94,13 @@ export async function readEmail(
         body = Buffer.from(htmlPart.body.data, "base64")
           .toString("utf-8")
           .replace(/<[^>]*>/g, " ")
+          .replace(/&nbsp;/gi, " ")
+          .replace(/&amp;/gi, "&")
+          .replace(/&lt;/gi, "<")
+          .replace(/&gt;/gi, ">")
+          .replace(/&quot;/gi, '"')
+          .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+          .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
           .replace(/\s+/g, " ")
           .trim();
       }

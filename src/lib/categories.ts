@@ -1,14 +1,14 @@
 import { supabase } from "./supabase";
 
 const DEFAULT_RULES: [RegExp, string][] = [
-  [/foodpanda|kfc|fish\s*&?\s*co|madchef|herfy|iftarwala/i, "food"],
+  [/foodpanda|kfc|fish\s*&?\s*co|madchef|herfy|iftarwala|gloria.*jean|peyala|cafe|coffee|restaurant|pizza|burger|bakery/i, "food"],
   [/uber(?!.*one)/i, "transport"],
-  [/spotify|anthropic|google\s*play|uber\s*one|trackingmore/i, "subscription"],
+  [/spotify|anthropic|claude\.ai|google\s*play|uber\s*one|trackingmore|microsoft/i, "subscription"],
   [/shwapno/i, "groceries"],
   [/pharmacy|ramna/i, "health"],
   [/dhl/i, "shipping"],
-  [/axaro|white\s*tailor/i, "shopping"],
-  [/persona/i, "lifestyle"],
+  [/axaro|white\s*tailor|daraz|amazon|chaldal/i, "shopping"],
+  [/persona|renaissance|hotel|radisson/i, "lifestyle"],
 ];
 
 let userRulesCache: { pattern: string; category: string }[] | null = null;

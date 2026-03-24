@@ -34,14 +34,14 @@ export default function BudgetsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-muted/50">
       <Header month={month} onMonthChange={setMonth} />
       <main className="container mx-auto px-4 py-6 space-y-6">
         <Card>
           <CardHeader><CardTitle>Set Budget for {format(new Date(month + "-01"), "MMMM yyyy")}</CardTitle></CardHeader>
           <CardContent><BudgetForm month={month} onSaved={fetchData} /></CardContent>
         </Card>
-        <BudgetProgress budgets={budgetTracking} />
+        <BudgetProgress budgets={budgetTracking} showLink={false} />
         <Card>
           <CardHeader><CardTitle className="text-base">Active Budgets</CardTitle></CardHeader>
           <CardContent>
@@ -55,7 +55,7 @@ export default function BudgetsPage() {
                   </div>
                 </div>
               ))}
-              {budgets.length === 0 && <p className="text-sm text-gray-500">No budgets set for this month.</p>}
+              {budgets.length === 0 && <p className="text-sm text-muted-foreground">No budgets set for this month.</p>}
             </div>
           </CardContent>
         </Card>

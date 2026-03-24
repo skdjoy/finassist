@@ -29,7 +29,13 @@ export async function GET(req: NextRequest) {
     .from("transactions").select("amount, type, transaction_date, id")
     .gte("transaction_date", trendStart).lt("transaction_date", endDate);
   const trendFiltered = (trendTransactions || []).filter((t) => !linkedIds.has(t.id));
+  // Pre-fill all 6 months so chart always shows complete range
   const monthlyTrend: Record<string, { income: number; expenses: number }> = {};
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(year, mon - 1 - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthlyTrend[key] = { income: 0, expenses: 0 };
+  }
   for (const t of trendFiltered) {
     const m = t.transaction_date.slice(0, 7);
     if (!monthlyTrend[m]) monthlyTrend[m] = { income: 0, expenses: 0 };

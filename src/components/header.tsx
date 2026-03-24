@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MonthSelector } from "./month-selector";
 
@@ -12,24 +14,22 @@ interface HeaderProps {
 
 export function Header({ month, onMonthChange }: HeaderProps) {
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
   async function handleSync() {
     setSyncing(true);
-    setSyncResult(null);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setSyncResult(`Synced ${data.synced} transactions, ${data.grouped} grouped`);
+        toast.success(`Synced ${data.synced} transactions, ${data.grouped} grouped`);
         router.refresh();
       } else {
-        setSyncResult(`Error: ${data.error}`);
+        toast.error(`Error: ${data.error}`);
       }
     } catch {
-      setSyncResult("Sync failed");
+      toast.error("Sync failed");
     }
     setSyncing(false);
   }
@@ -47,21 +47,20 @@ export function Header({ month, onMonthChange }: HeaderProps) {
   ];
 
   return (
-    <header className="border-b bg-white">
+    <header className="border-b bg-card">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold">FinAssist</h1>
           <nav className="flex gap-4">
             {navItems.map((item) => (
-              <a key={item.href} href={item.href}
-                className={`text-sm ${pathname === item.href ? "text-black font-medium" : "text-gray-500 hover:text-black"}`}>
+              <Link key={item.href} href={item.href}
+                className={`text-sm ${pathname === item.href ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}>
                 {item.label}
-              </a>
+              </Link>
             ))}
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          {syncResult && <span className="text-xs text-gray-500">{syncResult}</span>}
           <MonthSelector value={month} onChange={onMonthChange} />
           <Button size="sm" onClick={handleSync} disabled={syncing}>
             {syncing ? "Syncing..." : "Sync"}
