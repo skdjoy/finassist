@@ -25,7 +25,7 @@ FinAssist is a single-user personal finance tracker that reads Gmail transaction
 
 The core flow is: **Gmail API -> Router -> Parsers -> Grouping -> Supabase**
 
-1. **Sync trigger** (`src/app/api/sync/route.ts`): User clicks Sync, fetches emails from known senders since last sync, deduplicates by `gmail_message_id`. Per-email error handling skips bad emails (inserted with `parser_used: "error"` for dedup). Returns enriched response with breakdown by parser/type and error details.
+1. **Sync trigger** (`src/app/api/sync/route.ts`): User clicks Sync, fetches emails from known senders since last sync, deduplicates by `gmail_message_id`. Inserts email record FIRST (UNIQUE constraint as dedup gate), then transaction, then links them — prevents orphaned duplicate transactions. Per-email error handling skips bad emails (inserted with `parser_used: "error"` for dedup). DB updates for `last_sync_at` and `syncing` are separate calls to prevent silent failures. Returns enriched response with breakdown by parser/type and error details.
 2. **Router** (`src/lib/parsers/router.ts`): Matches sender address + subject to select a parser. Skips promotional/OTP emails.
 3. **Regex parsers** (`src/lib/parsers/scb-card.ts`, `scb-transfer.ts`, `scb-cc-payment.ts`, `citybank-deposit.ts`, `citytouch-bkash.ts`): Extract amount, merchant, date from structured bank emails using regex
 4. **LLM parser** (`src/lib/parsers/llm-service.ts`): Uses Claude Haiku for unstructured service emails (Foodpanda, Uber, Spotify, etc.)
@@ -112,6 +112,7 @@ Dashboard API (`/api/dashboard`) excludes linked (grouped) transactions from tot
 | `/api/budgets` | GET/POST/DELETE | Budget CRUD |
 | `/api/category-rules` | GET/POST/DELETE | Category rule CRUD |
 | `/api/admin/cleanup` | POST | One-time data cleanup (normalize merchants, fix categories) |
+| `/api/admin/reset` | POST | Delete all transactions/emails/groups and reset sync state |
 | `/api/gmail/connect` | GET | Start Gmail OAuth flow |
 | `/api/gmail/callback` | GET | Gmail OAuth callback |
 | `/api/auth/login` | POST | Login |
