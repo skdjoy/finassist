@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 const CATEGORIES = ["food", "transport", "subscription", "shopping", "health", "groceries", "transfer", "top_up", "lifestyle", "shipping", "other"];
 
-interface Rule { id: string; pattern: string; category: string; created_at: string }
+interface Rule { id: string; merchant_pattern: string; category: string; created_at: string }
 
 export function CategoryRulesManager() {
   const [rules, setRules] = useState<Rule[]>([]);
@@ -89,11 +89,11 @@ export function CategoryRulesManager() {
             {rules.map((rule) => (
               <div key={rule.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-3">
-                  <code className="text-sm bg-card px-2 py-0.5 rounded border">{rule.pattern}</code>
+                  <code className="text-sm bg-card px-2 py-0.5 rounded border">{rule.merchant_pattern}</code>
                   <span className="text-muted-foreground">&rarr;</span>
                   <Badge variant="outline">{rule.category.replace("_", " ")}</Badge>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => handleDelete(rule.id, rule.pattern)}>
+                <Button size="sm" variant="ghost" onClick={() => handleDelete(rule.id, rule.merchant_pattern)}>
                   <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                 </Button>
               </div>
