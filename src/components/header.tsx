@@ -12,6 +12,7 @@ import {
   DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { MonthSelector } from "./month-selector";
+import { ThemeToggle } from "./theme-toggle";
 import { Loader2 } from "lucide-react";
 
 interface HeaderProps {
@@ -200,6 +201,7 @@ export function Header({ month, onMonthChange }: HeaderProps) {
                 </>
               ) : "Sync"}
             </Button>
+            <ThemeToggle />
             <Button size="sm" variant="ghost" onClick={handleLogout}>Logout</Button>
           </div>
         </div>

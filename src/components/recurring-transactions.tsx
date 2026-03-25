@@ -1,8 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Repeat } from "lucide-react";
-import { normalizeMerchant } from "@/lib/merchant-utils";
 import { RecurringCharge } from "@/lib/recurring";
+import { format } from "date-fns";
 
 export function RecurringTransactions({ charges }: { charges: RecurringCharge[] }) {
   if (charges.length === 0) {
@@ -35,11 +35,17 @@ export function RecurringTransactions({ charges }: { charges: RecurringCharge[] 
           {charges.map((charge) => (
             <div key={charge.merchant} className="flex items-center justify-between py-2 border-b last:border-0">
               <div>
-                <p className="font-medium text-sm">{normalizeMerchant(charge.merchant)}</p>
+                <p className="font-medium text-sm">{charge.merchant}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className="text-xs">{charge.frequency}</Badge>
                   <span className="text-xs text-muted-foreground">{charge.count} charges</span>
+                  {charge.confidence >= 0.8 && <Badge variant="secondary" className="text-xs">Reliable</Badge>}
                 </div>
+                {charge.nextExpectedDate && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Next: ~{format(new Date(charge.nextExpectedDate), "MMM d")}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p className="font-semibold text-sm">৳{charge.avgAmount.toLocaleString()}</p>

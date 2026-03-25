@@ -1,5 +1,6 @@
 import { EmailInput, ParserResult } from "./types";
 import { autoAssignCategory } from "../categories";
+import { normalizeMerchant } from "../merchant-utils";
 
 const LOCAL_PATTERN = /A local (?:e-)?transaction of BDT ([\d,.]+) was made using your card ending with (\d+) at (.+?) on (\d{2}-\w{3}-\d{2})/i;
 const INTL_PATTERN = /An international e-transaction equivalent to BDT ([\d,.]+) was made using your card ending with (\d+) at (.+?) on (\d{2}-\w{3}-\d{2})/i;
@@ -24,7 +25,7 @@ export function parseScbCard(email: EmailInput): ParserResult {
   if (match) {
     const amount = parseAmount(match[1]);
     const card = match[2];
-    const merchant = match[3].trim();
+    const merchant = normalizeMerchant(match[3].trim());
     const date = parseDate(match[4]);
     const creditMatch = body.match(CREDIT_LIMIT_PATTERN);
     return {
@@ -43,7 +44,7 @@ export function parseScbCard(email: EmailInput): ParserResult {
   if (match) {
     const amount = parseAmount(match[1]);
     const card = match[2];
-    const merchant = match[3].trim();
+    const merchant = normalizeMerchant(match[3].trim());
     const date = parseDate(match[4]);
     const creditMatch = body.match(CREDIT_LIMIT_PATTERN);
     return {
@@ -67,7 +68,7 @@ export function parseScbCard(email: EmailInput): ParserResult {
     return {
       status: "parsed",
       transaction: {
-        amount, currency: "BDT", type: "transfer", category: "transfer",
+        amount, currency: "BDT", type: "withdrawal", category: "withdrawal",
         merchant: null, description: `Withdrawal from account ending ${account}`,
         transactionDate: date, source: "scb_card",
         rawData: { account, availableBalance: balanceMatch ? parseAmount(balanceMatch[1]) : null },

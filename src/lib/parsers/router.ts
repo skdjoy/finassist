@@ -29,7 +29,7 @@ function extractEmail(from: string): string {
 
 export function routeEmail(
   email: EmailInput
-): { parser: string; parse: () => Promise<ParserResult> | ParserResult } {
+): { parser: string; parse: () => Promise<ParserResult> | ParserResult; allowLlmFallback?: boolean } {
   const sender = extractEmail(email.from);
   const subject = email.subject.toLowerCase();
 
@@ -42,24 +42,24 @@ export function routeEmail(
   }
 
   if (sender === "smsbanking.bd@sc.com") {
-    return { parser: "scb_card", parse: () => parseScbCard(email) };
+    return { parser: "scb_card", parse: () => parseScbCard(email), allowLlmFallback: true };
   }
 
   if (sender === "ibanking.bangladesh@sc.com") {
     if (subject.includes("domestic transfer")) {
-      return { parser: "scb_transfer", parse: () => parseScbTransfer(email) };
+      return { parser: "scb_transfer", parse: () => parseScbTransfer(email), allowLlmFallback: true };
     }
     if (subject.includes("credit card payment")) {
-      return { parser: "scb_cc_payment", parse: () => parseScbCcPayment(email) };
+      return { parser: "scb_cc_payment", parse: () => parseScbCcPayment(email), allowLlmFallback: true };
     }
   }
 
   if (sender === "noreply@citybankplc.com" && subject.includes("deposited")) {
-    return { parser: "citybank_deposit", parse: () => parseCitybankDeposit(email) };
+    return { parser: "citybank_deposit", parse: () => parseCitybankDeposit(email), allowLlmFallback: true };
   }
 
   if (sender === "citytouch@thecitybank.com" && subject.includes("mobile wallet transfer")) {
-    return { parser: "citytouch_bkash", parse: () => parseCitytouchBkash(email) };
+    return { parser: "citytouch_bkash", parse: () => parseCitytouchBkash(email), allowLlmFallback: true };
   }
 
   if (SERVICE_SENDERS.includes(sender)) {

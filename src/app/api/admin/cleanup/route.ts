@@ -7,7 +7,19 @@ export async function POST() {
   try {
     await loadUserCategoryRules();
 
-    // Fetch all transactions
+    // Fix City Bank deposits: category "transfer" -> "income"
+    const { count: cityBankFixed } = await supabase
+      .from("transactions")
+      .update({ category: "income" }, { count: "exact" })
+      .eq("source", "citybank_deposit").eq("type", "income").eq("category", "transfer");
+
+    // Reclassify ATM withdrawals from "transfer" to "withdrawal"
+    const { count: withdrawalsFixed } = await supabase
+      .from("transactions")
+      .update({ type: "withdrawal", category: "withdrawal" }, { count: "exact" })
+      .eq("source", "scb_card").eq("type", "transfer").like("description", "Withdrawal%");
+
+    // Fetch all transactions for merchant normalization and re-categorization
     const { data: transactions, error } = await supabase
       .from("transactions")
       .select("id, merchant, category");
@@ -35,7 +47,11 @@ export async function POST() {
       }
     }
 
-    return NextResponse.json({ updated, total: transactions.length });
+    return NextResponse.json({
+      updated, total: transactions.length,
+      cityBankFixed: cityBankFixed || 0,
+      withdrawalsFixed: withdrawalsFixed || 0,
+    });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Cleanup failed" }, { status: 500 });
   }

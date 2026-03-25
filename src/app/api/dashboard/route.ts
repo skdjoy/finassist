@@ -28,21 +28,34 @@ export async function GET(req: NextRequest) {
 
   // 6-month trend
   const { data: trendTransactions } = await supabase
-    .from("transactions").select("amount, type, transaction_date, merchant, id")
+    .from("transactions").select("amount, type, category, transaction_date, merchant, id")
     .gte("transaction_date", trendStart).lt("transaction_date", endDate);
   const trendFiltered = (trendTransactions || []).filter((t) => !linkedIds.has(t.id));
   // Pre-fill all 6 months so chart always shows complete range
-  const monthlyTrend: Record<string, { income: number; expenses: number }> = {};
+  const monthlyTrend: Record<string, { income: number; expenses: number; savings: number }> = {};
   for (let i = 5; i >= 0; i--) {
     const d = new Date(year, mon - 1 - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    monthlyTrend[key] = { income: 0, expenses: 0 };
+    monthlyTrend[key] = { income: 0, expenses: 0, savings: 0 };
   }
+  // Category trends: per-category spending over 6 months
+  const categoryTrends: Record<string, Record<string, number>> = {};
   for (const t of trendFiltered) {
     const m = t.transaction_date.slice(0, 7);
-    if (!monthlyTrend[m]) monthlyTrend[m] = { income: 0, expenses: 0 };
+    if (!monthlyTrend[m]) monthlyTrend[m] = { income: 0, expenses: 0, savings: 0 };
     if (t.type === "income") monthlyTrend[m].income += Number(t.amount);
     if (t.type === "expense") monthlyTrend[m].expenses += Number(t.amount);
+  }
+  for (const key of Object.keys(monthlyTrend)) {
+    monthlyTrend[key].savings = monthlyTrend[key].income - monthlyTrend[key].expenses;
+  }
+  // Build category trends from trend data
+  for (const t of trendFiltered) {
+    if (t.type !== "expense") continue;
+    const m = t.transaction_date.slice(0, 7);
+    const cat = t.category || "other";
+    if (!categoryTrends[cat]) categoryTrends[cat] = {};
+    categoryTrends[cat][m] = (categoryTrends[cat][m] || 0) + Number(t.amount);
   }
   const incomeExpenseTrend = Object.entries(monthlyTrend)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -50,7 +63,26 @@ export async function GET(req: NextRequest) {
 
   const totalExpenses = filtered.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
   const totalIncome = filtered.filter((t) => t.type === "income").reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalWithdrawals = filtered.filter((t) => t.type === "withdrawal").reduce((sum, t) => sum + Number(t.amount), 0);
+  const totalTransfers = filtered.filter((t) => t.type === "transfer").reduce((sum, t) => sum + Number(t.amount), 0);
   const prevExpenses = prevFiltered.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
+
+  // Savings & spending rate
+  const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  const now = new Date();
+  const daysInMonth = new Date(year, mon, 0).getDate();
+  const daysElapsed = Math.max(1, Math.min(now.getDate(), daysInMonth));
+  const dailySpendingRate = totalExpenses / daysElapsed;
+  const projectedMonthEnd = dailySpendingRate * daysInMonth;
+
+  // Type breakdown
+  const typeBreakdown = {
+    expense: { count: filtered.filter((t) => t.type === "expense").length, total: totalExpenses },
+    income: { count: filtered.filter((t) => t.type === "income").length, total: totalIncome },
+    transfer: { count: filtered.filter((t) => t.type === "transfer").length, total: totalTransfers },
+    withdrawal: { count: filtered.filter((t) => t.type === "withdrawal").length, total: totalWithdrawals },
+    top_up: { count: filtered.filter((t) => t.type === "top_up").length, total: filtered.filter((t) => t.type === "top_up").reduce((sum, t) => sum + Number(t.amount), 0) },
+  };
 
   const byCategory: Record<string, number> = {};
   for (const t of filtered.filter((t) => t.type === "expense")) {
@@ -87,19 +119,21 @@ export async function GET(req: NextRequest) {
   for (const t of prevFiltered.filter((t) => t.type === "expense")) {
     prevByCategory[t.category] = (prevByCategory[t.category] || 0) + Number(t.amount);
   }
-  const now = new Date();
-  const daysInMonth = new Date(year, mon, 0).getDate();
   const daysRemaining = Math.max(0, daysInMonth - now.getDate());
   const topExpenseItem = topExpenses.length > 0 ? { merchant: topExpenses[0].merchant, amount: topExpenses[0].amount } : null;
   const insights = generateInsights({
     totalExpenses, totalIncome, prevExpenses,
     byCategory, prevByCategory, budgetTracking,
     topExpense: topExpenseItem, daysRemaining,
+    savingsRate, dailySpendingRate, projectedMonthEnd,
+    totalWithdrawals,
   });
 
   return NextResponse.json({
-    totalExpenses, totalIncome,
+    totalExpenses, totalIncome, totalWithdrawals,
     expenseChange: prevExpenses > 0 ? ((totalExpenses - prevExpenses) / prevExpenses) * 100 : 0,
+    savingsRate, dailySpendingRate, projectedMonthEnd,
+    typeBreakdown, categoryTrends,
     byCategory, topMerchants, topExpenses, budgetTracking, incomeExpenseTrend,
     recurring, insights,
   });

@@ -9,8 +9,11 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function TransactionsPage() {
   const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
-  const [transactions, setTransactions] = useState([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [groupedIds, setGroupedIds] = useState<Set<string>>(new Set());
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [groups, setGroups] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [type, setType] = useState("all");
@@ -29,8 +32,10 @@ export default function TransactionsPage() {
     const data = await res.json();
     setTransactions(data.transactions || []);
     setTotal(data.total || 0);
+    const rawGroups = data.groups || [];
+    setGroups(rawGroups);
     const gIds = new Set<string>();
-    for (const g of data.groups || []) { gIds.add(g.primary_transaction_id); gIds.add(g.linked_transaction_id); }
+    for (const g of rawGroups) { gIds.add(g.primary_transaction_id); gIds.add(g.linked_transaction_id); }
     setGroupedIds(gIds);
     setLoading(false);
   }, [month, search, category, type, page]);
@@ -56,7 +61,7 @@ export default function TransactionsPage() {
           <div className="bg-card rounded-lg border p-8 text-center text-muted-foreground">Loading...</div>
         ) : (
           <>
-            <TransactionTable transactions={transactions} groupedIds={groupedIds} onCategoryChange={handleCategoryChange} />
+            <TransactionTable transactions={transactions} groupedIds={groupedIds} groups={groups} onCategoryChange={handleCategoryChange} />
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-2">
                 <p className="text-sm text-muted-foreground">{total} transactions</p>

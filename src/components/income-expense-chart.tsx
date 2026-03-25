@@ -1,9 +1,9 @@
 "use client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Line, ComposedChart } from "recharts";
 
 interface IncomeExpenseChartProps {
-  data: { month: string; income: number; expenses: number }[];
+  data: { month: string; income: number; expenses: number; savings: number }[];
 }
 
 function formatMonth(month: string): string {
@@ -33,7 +33,7 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
       <CardHeader><CardTitle className="text-base">Income vs Expenses</CardTitle></CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={formatted} barGap={4}>
+          <ComposedChart data={formatted} barGap={4}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="label" tick={{ fontSize: 13 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={(v) => `৳${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -41,7 +41,8 @@ export function IncomeExpenseChart({ data }: IncomeExpenseChartProps) {
             <Legend />
             <Bar dataKey="income" fill="#22c55e" name="Income" radius={[4, 4, 0, 0]} />
             <Bar dataKey="expenses" fill="#ef4444" name="Expenses" radius={[4, 4, 0, 0]} />
-          </BarChart>
+            <Line dataKey="savings" stroke="#3b82f6" name="Net Savings" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 5" />
+          </ComposedChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

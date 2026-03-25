@@ -21,11 +21,34 @@ function timeClose(a: Date, b: Date, windowMs: number): boolean {
   return Math.abs(a.getTime() - b.getTime()) <= windowMs;
 }
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const temp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = temp;
+    }
+  }
+  return dp[n];
+}
+
 function merchantFuzzyMatch(a: string | null, b: string | null): boolean {
   if (!a || !b) return false;
   const na = a.toLowerCase().replace(/[^a-z0-9]/g, "");
   const nb = b.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return na.includes(nb) || nb.includes(na);
+
+  // Substring match (existing logic)
+  if (na.includes(nb) || nb.includes(na)) return true;
+
+  // Levenshtein similarity for near-matches (e.g., "McDonalds" vs "McDonald's")
+  const maxLen = Math.max(na.length, nb.length);
+  if (maxLen === 0) return false;
+  const distance = levenshtein(na, nb);
+  return (maxLen - distance) / maxLen >= 0.8;
 }
 
 export function findGroups(txs: TransactionWithEmail[]): GroupMatch[] {

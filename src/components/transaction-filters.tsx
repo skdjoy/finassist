@@ -8,8 +8,8 @@ interface FiltersProps {
   type: string; onTypeChange: (v: string) => void;
 }
 
-const CATEGORIES = ["all","food","transport","subscription","shopping","health","groceries","transfer","top_up","lifestyle","shipping","other"];
-const TYPES = ["all","expense","income","transfer","top_up"];
+const CATEGORIES = ["all","food","dining","transport","subscription","shopping","health","groceries","transfer","top_up","withdrawal","lifestyle","shipping","entertainment","utilities","education","income","other"];
+const TYPES = ["all","expense","income","transfer","top_up","withdrawal"];
 
 export function TransactionFilters({ search, onSearchChange, category, onCategoryChange, type, onTypeChange }: FiltersProps) {
   return (

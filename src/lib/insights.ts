@@ -7,6 +7,10 @@ interface InsightData {
   budgetTracking: { category: string; budget: number; spent: number; percentage: number }[];
   topExpense: { merchant: string; amount: number } | null;
   daysRemaining: number;
+  savingsRate?: number;
+  dailySpendingRate?: number;
+  projectedMonthEnd?: number;
+  totalWithdrawals?: number;
 }
 
 export interface Insight {
@@ -27,11 +31,42 @@ export function generateInsights(data: InsightData): Insight[] {
     }
   }
 
+  // Projected overspend alert
+  if (data.projectedMonthEnd && data.daysRemaining > 3) {
+    const overallBudget = data.budgetTracking.find((b) => b.category === "overall");
+    if (overallBudget && data.projectedMonthEnd > overallBudget.budget) {
+      const overBy = Math.round(data.projectedMonthEnd - overallBudget.budget);
+      insights.push({ type: "alert", message: `On pace to exceed budget by ৳${overBy.toLocaleString()} this month` });
+    }
+  }
+
+  // Daily spending rate
+  if (data.dailySpendingRate && data.dailySpendingRate > 0) {
+    insights.push({ type: "info", message: `Averaging ৳${Math.round(data.dailySpendingRate).toLocaleString()} per day in spending` });
+  }
+
   // Category changes vs last month
   for (const [cat, amount] of Object.entries(data.byCategory)) {
     const prev = data.prevByCategory[cat] || 0;
     if (prev > 0 && amount > prev * 1.5 && amount > 1000) {
       insights.push({ type: "warning", message: `${capitalize(cat)} spending is ${((amount / prev - 1) * 100).toFixed(0)}% higher than last month` });
+    }
+  }
+
+  // New category detection (spending in category that didn't exist last month)
+  for (const [cat, amount] of Object.entries(data.byCategory)) {
+    if (amount > 500 && !data.prevByCategory[cat]) {
+      insights.push({ type: "info", message: `New spending category: ${capitalize(cat)} — ৳${amount.toLocaleString()} this month` });
+    }
+  }
+
+  // Category concentration warning
+  if (data.totalExpenses > 0) {
+    for (const [cat, amount] of Object.entries(data.byCategory)) {
+      const share = (amount / data.totalExpenses) * 100;
+      if (share > 50 && cat !== "other") {
+        insights.push({ type: "warning", message: `${capitalize(cat)} accounts for ${share.toFixed(0)}% of all spending` });
+      }
     }
   }
 
@@ -49,17 +84,25 @@ export function generateInsights(data: InsightData): Insight[] {
     insights.push({ type: "info", message: `Largest expense: ${data.topExpense.merchant || "Unknown"} — ৳${data.topExpense.amount.toLocaleString()}` });
   }
 
-  // Net savings
+  // Net savings / deficit
   if (data.totalIncome > 0) {
     const savings = data.totalIncome - data.totalExpenses;
     if (savings > 0) {
-      insights.push({ type: "info", message: `Net savings this month: ৳${savings.toLocaleString()}` });
+      const rate = data.savingsRate ?? ((savings / data.totalIncome) * 100);
+      insights.push({ type: "info", message: `Saving ${rate.toFixed(0)}% of income — ৳${savings.toLocaleString()} this month` });
     } else {
       insights.push({ type: "alert", message: `Spending exceeds income by ৳${Math.abs(savings).toLocaleString()}` });
     }
   }
 
-  return insights.slice(0, 4);
+  // Withdrawals notice
+  if (data.totalWithdrawals && data.totalWithdrawals > 0) {
+    insights.push({ type: "info", message: `৳${data.totalWithdrawals.toLocaleString()} withdrawn in cash this month` });
+  }
+
+  // Sort by severity (alerts first, then warnings, then info), limit to 8
+  const order = { alert: 0, warning: 1, info: 2 };
+  return insights.sort((a, b) => order[a.type] - order[b.type]).slice(0, 8);
 }
 
 function capitalize(s: string): string {

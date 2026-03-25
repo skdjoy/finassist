@@ -34,6 +34,19 @@ describe("autoAssignCategory", () => {
     ["Persona(gulshan-2) Dhaka BD", "lifestyle"],
     ["RENAISSANCE DHAKA GULSHANDHAKA BD", "lifestyle"],
     ["Radisson Blu Chattogram", "lifestyle"],
+    // Dining
+    ["Steakhouse Grill Banani", "dining"],
+    ["Sushi Bar Gulshan", "dining"],
+    // Entertainment
+    ["Netflix Monthly", "entertainment"],
+    ["Cinema Star Dhanmondi", "entertainment"],
+    // Utilities
+    ["Grameenphone Bill", "utilities"],
+    ["Electricity Board Payment", "utilities"],
+    ["Internet Broadband Link3", "utilities"],
+    // Education
+    ["Udemy Course Purchase", "education"],
+    ["Coursera Subscription", "education"],
     // Fallback
     ["Random Unknown Merchant", "other"],
     ["ONE MANAGEMENT LTD Gulshan ModelBD", "other"],

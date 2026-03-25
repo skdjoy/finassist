@@ -39,7 +39,7 @@ describe("parseScbCard", () => {
     expect(result.status).toBe("parsed");
     if (result.status === "parsed") {
       expect(result.transaction.amount).toBe(20000.0);
-      expect(result.transaction.type).toBe("transfer");
+      expect(result.transaction.type).toBe("withdrawal");
       expect(result.transaction.rawData).toHaveProperty("account", "8501");
     }
   });

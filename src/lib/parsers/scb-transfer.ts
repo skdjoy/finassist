@@ -1,4 +1,5 @@
 import { EmailInput, ParserResult } from "./types";
+import { normalizeMerchant } from "../merchant-utils";
 
 const AMOUNT_PATTERN = /Payment Amount\s*BDT\s*([\d,.]+)/i;
 const REFERENCE_PATTERN = /Payment Reference Number\s*(\w+)/i;
@@ -32,7 +33,7 @@ export function parseScbTransfer(email: EmailInput): ParserResult {
     status: "parsed",
     transaction: {
       amount, currency: "BDT", type: "transfer", category: "transfer",
-      merchant: beneficiaryBank || null,
+      merchant: beneficiaryBank ? normalizeMerchant(beneficiaryBank) : null,
       description: `Transfer to ${beneficiaryName || transferTo}`,
       transactionDate: email.internalDate, source: "scb_transfer",
       rawData: { referenceNumber: reference, transferTo, transferFrom, beneficiaryName, beneficiaryBank, status },

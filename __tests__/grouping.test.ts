@@ -41,4 +41,13 @@ describe("findGroups", () => {
     expect(groups.some((g) => g.reason === "bank_plus_merchant")).toBe(true);
     expect(groups[0].primaryEmailId).toBe("e2");
   });
+
+  it("fuzzy matches merchants with Levenshtein similarity", () => {
+    const txs = [
+      makeTx({ _emailId: "e1", source: "scb_card", amount: 500, merchant: "McDonalds Gulshan", transactionDate: new Date("2026-03-22T15:55:00Z") }),
+      makeTx({ _emailId: "e2", source: "llm_service", amount: 502, merchant: "McDonald's", transactionDate: new Date("2026-03-22T15:53:00Z") }),
+    ];
+    const groups = findGroups(txs);
+    expect(groups.some((g) => g.reason === "bank_plus_merchant")).toBe(true);
+  });
 });

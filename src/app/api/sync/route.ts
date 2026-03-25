@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getGmailClient, searchEmails, readEmail } from "@/lib/gmail";
 import { routeEmail } from "@/lib/parsers/router";
+import { parseLlmService } from "@/lib/parsers/llm-service";
 import { findGroups, TransactionWithEmail } from "@/lib/grouping";
 import { EmailInput } from "@/lib/parsers/types";
 import { loadUserCategoryRules } from "@/lib/categories";
@@ -152,7 +153,7 @@ export async function POST() {
           date: emailData.date, internalDate: emailData.internalDate,
         };
 
-        const { parser, parse } = routeEmail(emailInput);
+        const { parser, parse, allowLlmFallback } = routeEmail(emailInput);
 
         if (parser === "skip") {
           skipped++;
@@ -164,13 +165,28 @@ export async function POST() {
           continue;
         }
 
-        const result = await parse();
+        let result = await parse();
+        let parserUsed = parser;
+
+        // LLM fallback: if regex parser failed, try LLM before giving up
+        if (result.status === "skip" && allowLlmFallback) {
+          try {
+            const llmResult = await parseLlmService(emailInput, { failedParser: parser });
+            if (llmResult.status === "parsed") {
+              result = llmResult;
+              parserUsed = "llm_fallback";
+            }
+          } catch {
+            // LLM also failed, keep original skip result
+          }
+        }
+
         if (result.status === "skip") {
           skipped++;
           await supabase.from("emails").insert({
             gmail_message_id: emailData.messageId, sender: emailData.from,
             subject: emailData.subject, snippet: emailData.snippet,
-            email_date: emailData.internalDate.toISOString(), parser_used: parser,
+            email_date: emailData.internalDate.toISOString(), parser_used: parserUsed,
           });
           continue;
         }
@@ -178,7 +194,7 @@ export async function POST() {
         parsedResults.push({
           email: emailInput,
           tx: { ...result.transaction, _emailId: emailData.messageId },
-          parserUsed: parser,
+          parserUsed,
         });
       } catch (err) {
         console.error(`Error processing email ${msgId}:`, err);

@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const CATEGORIES = [
-  { value: "overall", label: "Overall" },{ value: "food", label: "Food" },{ value: "transport", label: "Transport" },
-  { value: "subscription", label: "Subscription" },{ value: "shopping", label: "Shopping" },{ value: "health", label: "Health" },
-  { value: "groceries", label: "Groceries" },{ value: "lifestyle", label: "Lifestyle" },{ value: "shipping", label: "Shipping" },{ value: "other", label: "Other" },
+  { value: "overall", label: "Overall" },{ value: "food", label: "Food" },{ value: "dining", label: "Dining" },
+  { value: "transport", label: "Transport" },{ value: "subscription", label: "Subscription" },{ value: "shopping", label: "Shopping" },
+  { value: "health", label: "Health" },{ value: "groceries", label: "Groceries" },{ value: "entertainment", label: "Entertainment" },
+  { value: "utilities", label: "Utilities" },{ value: "education", label: "Education" },
+  { value: "lifestyle", label: "Lifestyle" },{ value: "shipping", label: "Shipping" },{ value: "other", label: "Other" },
 ];
 
 export function BudgetForm({ month, onSaved }: { month: string; onSaved: () => void }) {

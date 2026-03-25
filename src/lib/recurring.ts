@@ -8,11 +8,13 @@ interface Transaction {
 
 export interface RecurringCharge {
   merchant: string;
-  frequency: "weekly" | "monthly" | "irregular";
+  frequency: "weekly" | "monthly" | "quarterly";
   avgAmount: number;
   count: number;
   lastDate: string;
+  nextExpectedDate: string;
   monthlyEstimate: number;
+  confidence: number; // 0-1 based on interval consistency
 }
 
 export function detectRecurring(transactions: Transaction[]): RecurringCharge[] {
@@ -43,7 +45,12 @@ export function detectRecurring(transactions: Transaction[]): RecurringCharge[] 
     }
     const avgInterval = intervals.reduce((s, d) => s + d, 0) / intervals.length;
 
-    let frequency: "weekly" | "monthly" | "irregular";
+    // Confidence: how consistent are the intervals (lower stddev = higher confidence)
+    const variance = intervals.reduce((s, d) => s + (d - avgInterval) ** 2, 0) / intervals.length;
+    const stddev = Math.sqrt(variance);
+    const confidence = Math.max(0, Math.min(1, 1 - stddev / avgInterval));
+
+    let frequency: "weekly" | "monthly" | "quarterly";
     let monthlyEstimate: number;
     if (avgInterval >= 5 && avgInterval <= 10) {
       frequency = "weekly";
@@ -51,17 +58,30 @@ export function detectRecurring(transactions: Transaction[]): RecurringCharge[] 
     } else if (avgInterval >= 20 && avgInterval <= 40) {
       frequency = "monthly";
       monthlyEstimate = avg;
+    } else if (avgInterval >= 75 && avgInterval <= 110) {
+      frequency = "quarterly";
+      monthlyEstimate = avg / 3;
     } else {
       continue; // Skip irregular patterns
     }
 
+    // Calculate next expected date
+    const lastDate = sorted[sorted.length - 1];
+    const nextDate = new Date(lastDate.getTime() + avgInterval * 24 * 60 * 60 * 1000);
+
+    const originalMerchant = transactions.find(
+      (t) => t.merchant?.toLowerCase().replace(/\s+/g, " ").trim() === merchant
+    )?.merchant || merchant;
+
     results.push({
-      merchant: transactions.find((t) => t.merchant?.toLowerCase().replace(/\s+/g, " ").trim() === merchant)?.merchant || merchant,
+      merchant: originalMerchant,
       frequency,
       avgAmount: Math.round(avg * 100) / 100,
       count: amounts.length,
-      lastDate: sorted[sorted.length - 1].toISOString(),
+      lastDate: lastDate.toISOString(),
+      nextExpectedDate: nextDate.toISOString(),
       monthlyEstimate: Math.round(monthlyEstimate),
+      confidence: Math.round(confidence * 100) / 100,
     });
   }
 

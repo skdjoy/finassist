@@ -1,7 +1,11 @@
 import { supabase } from "./supabase";
 
 const DEFAULT_RULES: [RegExp, string][] = [
+  [/dining|dine|brunch|lunch|dinner|steakhouse|sushi|thai\s*food|chinese\s*food|indian\s*food|italian\s*food/i, "dining"],
   [/foodpanda|kfc|fish\s*&?\s*co|madchef|herfy|iftarwala|gloria.*jean|peyala|cafe|coffee|restaurant|pizza|burger|bakery/i, "food"],
+  [/entertainment|cinema|movie|netflix|youtube\s*premium|gaming|steam|playstation/i, "entertainment"],
+  [/electric|electricity|water\s*bill|gas\s*bill|internet|broadband|phone\s*bill|airtime|grameenphone|robi|banglalink|teletalk/i, "utilities"],
+  [/education|tuition|course|udemy|coursera|school|university/i, "education"],
   [/uber(?!.*one)/i, "transport"],
   [/spotify|anthropic|claude\.ai|google\s*play|uber\s*one|trackingmore|microsoft/i, "subscription"],
   [/shwapno/i, "groceries"],

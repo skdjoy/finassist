@@ -17,6 +17,7 @@ describe("parseCitybankDeposit", () => {
     if (result.status === "parsed") {
       expect(result.transaction.amount).toBe(7000);
       expect(result.transaction.type).toBe("income");
+      expect(result.transaction.category).toBe("income");
       expect(result.transaction.rawData).toHaveProperty("account", "28035******001");
       expect(result.transaction.rawData).toHaveProperty("balance", 7870.59);
     }

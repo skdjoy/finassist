@@ -27,7 +27,7 @@ export function parseCitybankDeposit(email: EmailInput): ParserResult {
   return {
     status: "parsed",
     transaction: {
-      amount, currency: "BDT", type: "income", category: "transfer",
+      amount, currency: "BDT", type: "income", category: "income",
       merchant: "City Bank",
       description: `Deposit to account ${account}`,
       transactionDate, source: "citybank_deposit",

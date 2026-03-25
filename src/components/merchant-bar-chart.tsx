@@ -1,7 +1,6 @@
 "use client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { normalizeMerchant } from "@/lib/merchant-utils";
 
 interface MerchantBarChartProps { data: { merchant: string; amount: number }[] }
 
@@ -12,7 +11,7 @@ function truncate(str: string, max: number): string {
 export function MerchantBarChart({ data }: MerchantBarChartProps) {
   const formatted = data.map((d) => ({
     ...d,
-    label: truncate(normalizeMerchant(d.merchant), 20),
+    label: truncate(d.merchant, 20),
     displayAmount: `৳${d.amount.toLocaleString()}`,
   }));
   const chartHeight = Math.max(300, data.length * 35);

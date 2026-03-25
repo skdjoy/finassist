@@ -12,7 +12,7 @@ export interface EmailInput {
 export interface ParsedTransaction {
   amount: number;
   currency: string;
-  type: "expense" | "income" | "transfer" | "top_up";
+  type: "expense" | "income" | "transfer" | "top_up" | "withdrawal";
   category: string;
   merchant: string | null;
   description: string;
