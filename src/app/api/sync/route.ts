@@ -101,7 +101,20 @@ export async function POST() {
     }
 
     // 3. Fetch emails from Gmail
-    const gmail = await getGmailClient();
+    let gmail;
+    try {
+      gmail = await getGmailClient();
+    } catch (err) {
+      await clearSyncLock();
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("invalid_grant") || msg.includes("Token has been expired or revoked")) {
+        return NextResponse.json(
+          { error: "Gmail session expired. Please reconnect Gmail in Settings." },
+          { status: 401 }
+        );
+      }
+      throw err;
+    }
     const messageRefs = await searchEmails(gmail, query, 100);
     if (messageRefs.length === 0) {
       const now = new Date().toISOString();
@@ -314,9 +327,13 @@ export async function POST() {
     // Clear lock on failure — separate call
     await clearSyncLock();
     console.error("Sync error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Sync failed" },
-      { status: 500 }
-    );
+    const msg = error instanceof Error ? error.message : "Sync failed";
+    if (msg.includes("invalid_grant") || msg.includes("Token has been expired or revoked")) {
+      return NextResponse.json(
+        { error: "Gmail session expired. Please reconnect Gmail in Settings." },
+        { status: 401 }
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

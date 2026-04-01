@@ -47,7 +47,7 @@ The core flow is: **Gmail API -> Router -> Parsers (with LLM fallback) -> Groupi
 
 ### Database (Supabase)
 
-Schema in `supabase/migrations/001_initial_schema.sql` and `002_add_withdrawal_type_and_fixes.sql`. Key tables:
+Schema in `supabase/migrations/001_initial_schema.sql`, `002_add_withdrawal_type_and_fixes.sql`, and `003_add_syncing_and_rls.sql`. Key tables:
 - `transactions`: Core data (amount, type, category, merchant, source, raw_data JSONB). Type CHECK constraint: `expense`, `income`, `transfer`, `top_up`, `withdrawal`.
 - `emails`: Gmail message tracking, FK to transactions, dedup key on `gmail_message_id`
 - `transaction_groups`: Links primary + linked transactions with a `group_reason`
